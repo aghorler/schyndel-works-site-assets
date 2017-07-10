@@ -1,8 +1,186 @@
 BR (A).1
-- Created ec2 t2.micro vm with instance id <<enter instance id>>
-- Download source & compile apache with the following config params:
-    ./configure --with-port=8080 ...
+- Created ec2 t2.micro vm with instance id i-0a6da73a62de557be
+
+- I installed and configured Apache using a script that I created. See resources/setup-*.sh for entire scripts.
+
+- Escalate to root
+	sudo su
+
+- Install dependancies using apt (build-essential, libpcre3-dev, libxml2-dev, libtool-bin, and unzip).
+	apt-get -y install build-essential libpcre3-dev libxml2-dev libtool-bin unzip
+
+- Download source and compile APR (Apache Portable Runtime), running configure without any arguments.
+	wget http://apache.mirror.amaze.com.au//apr/apr-1.5.2.tar.gz
+	gzip -d apr-1.5.2.tar.gz
+	tar -xvf apr-1.5.2.tar
+	cd apr-1.5.2
+	./configure
+	make
+	make install
+
+	cd ..
+	wget http://apache.mirror.amaze.com.au//apr/apr-util-1.5.4.tar.gz
+	gzip -d apr-util-1.5.4.tar.gz
+	tar -xvf apr-util-1.5.4.tar
+	cd apr-util-1.5.4
+	./configure --with-apr=/usr/local/apr/bin/apr-1-config
+	make
+	make install
+
+- Download source and compile Apache with various config params (notably the event mpm for performance).
+	wget http://apache.mirror.serversaustralia.com.au//httpd/httpd-2.4.25.tar.gz
+	gzip -d httpd-2.4.25.tar.gz
+	tar -xvf httpd-2.4.25.tar
+	cd httpd-2.4.25
+	./configure --prefix=/etc/apache2/schyndel/server_root --with-mpm=event --enable-so --enable-speling --enable-rewrite --enable-include --enable-auth --enable-auth-digest --enable-headers --with-port=8080
+	make
+	make install
 
 BR (A).1.1
-- Changed Listen directive in httpd.conf to 8080 from 80
-...
+- Using ./configure on compilation.
+	--with-port=8080
+
+- Ensure that Listen directive in httpd.conf is correctly set to 8080.
+	Listen 8080
+
+BR (A).1.2
+- Using ./configure on compilation.
+	--prefix=/etc/apache2/schyndel/server_root
+
+- Ensure that ServerRoot directive in httpd.conf is correctly set.
+	ServerRoot "/etc/apache2/schyndel/server_root"
+
+BR (A).1.3
+- Create auth directory
+	mkdir /etc/apache2/schyndel/server_root/auth/
+
+- Run htpasswd
+	bin/htpasswd -c auth/basic.pw bob
+	bin/htpasswd auth/basic.pw charlie
+	bin/htdigest -c auth/digest.pw secure-digest alice
+	bin/htdigest auth/digest.pw secure-digest dean
+
+BR (A).1.4
+- Download source and compile PHP with varioous config params.
+	wget -O php-7.1.5.tar.gz http://au1.php.net/get/php-7.1.5.tar.gz/from/this/mirror
+	gzip -d php-7.1.5.tar.gz
+	tar -xvf php-7.1.5.tar
+	cd php-7.1.5
+	./configure --prefix=/etc/apache2/schyndel/server_root/php --with-apxs2=/etc/apache2/schyndel/server_root/bin/apxs --with-config-file-path=/etc/apache2/schyndel/server_root/php
+	make
+	make install
+
+- Ensure that PHP module is enable in httpd.conf
+	LoadModule php7_module modules/libphp7.so
+
+- Add index.php to DirectoryIndex directive
+	DirectoryIndex ... index.php
+
+- Use AddType directive to enable PHP content
+	AddType application/x-httpd-php .php
+
+BR (A).2
+- Using ./configure on compilation.
+	--enable-speling
+
+- Ensure that module is enabled in httpd.conf
+	LoadModule speling_module modules/mod_speling.so
+
+- Enable full functionality of speling module.
+	CheckSpelling on
+
+BR (A).3
+- Make document_root directory.
+	mkdir -p /etc/apache2/schyndel/document_root
+
+- Set DocumentRoot directive in httpd.conf
+	DocumentRoot "/etc/apache2/schyndel/document_root"
+	<Directory "/etc/apache2/schyndel/document_root">
+		...
+	</Directory>
+
+- Download schyndel-works-site from rohit-lakhanpal's GitHub, and extract to document_root.
+	cd /etc/apache2/schyndel/document_root
+	wget https://github.com/rohit-lakhanpal/schyndel-works-site/archive/master.zip
+	unzip master.zip
+	rm master.zip
+	mv -f schyndel-works-site-master/* .
+	rmdir schyndel-works-site-master
+
+- Correctly set permissions.
+	chmod -R 755 /etc/apache2/schyndel/document_root/
+	chown -R ubuntu: /etc/apache2/schyndel/document_root/
+
+BR (A).4
+- Specify order in DirectoryIndex directive.
+	DirectoryIndex index.html index.shtml index.php
+
+BR (A).5
+- Using ./configure on compilation.
+	--enable-include
+
+- Ensure that module is enabled in httpd.conf
+	LoadModule include_module modules/mod_include.so
+
+- Use Options directive to enable includes in ssi directory only.
+	<Directory "/etc/apache2/schyndel/document_root/ssi">
+		Options +Includes
+	</Directory>
+
+- Ensure that index.shtml is included in the DirectoryIndex directive.
+	DirectoryIndex ... index.shtml ...
+
+- Use AddType and AddOutputFilter directives to enable shtml conent.
+	AddType text/html .shtml
+	AddOutputFilter INCLUDES .shtml
+
+BR (A).6
+- Use <Files> directive with Require to deny files matching *.gif
+	<Files "*.gif">
+		Require all denied
+	</Files>
+
+BR (A).7
+- Using ./configure on compilation.
+	--enable-auth
+
+- Ensure that auth_basic_module is enabled in httpd.conf
+	LoadModule auth_basic_module modules/mod_auth_basic.so
+
+- See BR (A).1.3 for htpasswd configuration.
+
+- Use the <Directory> directive to enable basic authentication on the secure-basic directory, specifying auth/basic.pw as the AuthUserFile.
+	<Directory "/etc/apache2/schyndel/document_root/secure-basic">
+		AuthType Basic
+		AuthName "secure-basic"
+		AuthUserFile /etc/apache2/schyndel/server_root/auth/basic.pw
+		require valid-user
+	</Directory>
+
+BR (A).8
+- Using ./configure on compilation.
+	--enable-auth
+
+- Ensure that auth_digest_module is enabled in httpd.conf
+	LoadModule auth_digest_module modules/mod_auth_digest.so
+
+- See BR (A).1.3 for htpasswd configuration.
+
+- Use the <Directory> directive to enable digest authentication on the secure-digest directory, specifying auth/digest.pw as the AuthUserFile.
+	<Directory "/etc/apache2/schyndel/document_root/secure-digest">
+		AuthType Digest
+		AuthName "secure-digest"
+		AuthUserFile /etc/apache2/schyndel/server_root/auth/digest.pw
+		AuthDigestDomain "/secure-digest/"
+		require valid-user
+	</Directory>
+
+BR (A).9
+- Using ./configure on compilation.
+	--enable-headers
+
+- Ensure that headers_module is enabled in httpd.conf
+	LoadModule headers_module modules/mod_headers.so
+
+- Use Header directive to always set X-Served-Via header.
+	Header always set X-Served-Via "Web-Server-A"
